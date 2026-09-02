@@ -12,6 +12,10 @@ export async function POST(request: Request) {
 	if (!userId || !channelId || !resourceId) return new NextResponse(null, { status: 204 });
 	const result = await pool.query("select 1 from calendar_sync_state where user_id = $1 and channel_id = $2 and channel_resource_id = $3", [userId, channelId, resourceId]);
 	if (!result.rowCount) return new NextResponse(null, { status: 204 });
+	if (resourceState === "sync") {
+		console.info("Google Calendar watch confirmed", { userId, channelId, resourceId });
+		return new NextResponse(null, { status: 204 });
+	}
 	try {
 		await reconcileCalendar(userId);
 		console.info("Google Calendar webhook reconciliation complete", { userId });
