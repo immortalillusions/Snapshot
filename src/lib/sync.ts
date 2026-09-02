@@ -47,7 +47,10 @@ export async function registerCalendarWatch(userId: string) {
   if (state.channel_id && state.channel_resource_id) {
     try { await calendar.channels.stop({ requestBody: { id: state.channel_id, resourceId: state.channel_resource_id } }); } catch { /* The old channel may already be expired. */ }
   }
-  const response = await calendar.events.watch({ calendarId: state.calendar_id, requestBody: { id: randomUUID(), type: "web_hook", address: `${appUrl}/api/webhooks/google-calendar`, token: userId } });
+  const webhookAddress = `${appUrl}/api/webhooks/google-calendar`;
+  console.info("Registering Google Calendar watch", { webhookAddress, calendarId: state.calendar_id });
+  const response = await calendar.events.watch({ calendarId: state.calendar_id, requestBody: { id: randomUUID(), type: "web_hook", address: webhookAddress, token: userId } });
+  console.info("Google Calendar watch registered", { channelId: response.data.id, resourceId: response.data.resourceId, expiration: response.data.expiration });
   await pool.query("update calendar_sync_state set channel_id = $1, channel_resource_id = $2, channel_expires_at = to_timestamp($3::double precision / 1000), updated_at = now() where user_id = $4", [response.data.id, response.data.resourceId, response.data.expiration, userId]);
 }
 

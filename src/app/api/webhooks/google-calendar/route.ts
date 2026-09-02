@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { reconcileCalendar } from "@/lib/sync";
 import { regenerateSummaries } from "@/lib/summaries";
 import { pool } from "@/lib/db";
+export function GET() { return NextResponse.json({ ok: true, service: "google-calendar-webhook" }); }
 export async function POST(request: Request) {
 	const userId = request.headers.get("x-goog-channel-token");
 	const channelId = request.headers.get("x-goog-channel-id");
