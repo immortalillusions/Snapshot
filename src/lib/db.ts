@@ -1,7 +1,7 @@
 import { Pool, type PoolClient } from "pg";
 
 const globalForDb = globalThis as unknown as { snapshotPool?: Pool };
-export const pool = globalForDb.snapshotPool ?? new Pool({ connectionString: process.env.DATABASE_URL, max: 5, ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : undefined });
+export const pool = globalForDb.snapshotPool ?? new Pool({ connectionString: process.env.STORAGE_DATABASE_URL, max: 5, ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : undefined });
 if (process.env.NODE_ENV !== "production") globalForDb.snapshotPool = pool;
 
 export async function withTransaction<T>(work: (client: PoolClient) => Promise<T>) {
