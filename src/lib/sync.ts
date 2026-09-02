@@ -40,6 +40,19 @@ export async function reconcileCalendar(userId: string) {
 export async function registerCalendarWatch(userId: string) {
   const result = await pool.query("select s.*, u.access_token, u.refresh_token from calendar_sync_state s join users u on u.id = s.user_id where s.user_id = $1", [userId]);
   const state = result.rows[0];
-  const response = await createCalendarClient(state.access_token, state.refresh_token).events.watch({ calendarId: state.calendar_id, requestBody: { id: randomUUID(), type: "web_hook", address: `${process.env.APP_URL}/api/webhooks/google-calendar`, token: userId } });
+  const appUrl = process.env.APP_URL?.replace(/\/$/, "");
+  if (!appUrl) throw new Error("APP_URL is required for Calendar webhooks");
+  if (process.env.NODE_ENV === "production" && !appUrl.startsWith("https://")) throw new Error("APP_URL must be a public HTTPS URL for Calendar webhooks");
+  const calendar = createCalendarClient(state.access_token, state.refresh_token);
+  if (state.channel_id && state.channel_resource_id) {
+    try { await calendar.channels.stop({ requestBody: { id: state.channel_id, resourceId: state.channel_resource_id } }); } catch { /* The old channel may already be expired. */ }
+  }
+  const response = await calendar.events.watch({ calendarId: state.calendar_id, requestBody: { id: randomUUID(), type: "web_hook", address: `${appUrl}/api/webhooks/google-calendar`, token: userId } });
   await pool.query("update calendar_sync_state set channel_id = $1, channel_resource_id = $2, channel_expires_at = to_timestamp($3::double precision / 1000), updated_at = now() where user_id = $4", [response.data.id, response.data.resourceId, response.data.expiration, userId]);
+}
+
+export async function renewCalendarWatchIfNeeded(userId: string) {
+  const result = await pool.query("select channel_expires_at from calendar_sync_state where user_id = $1", [userId]);
+  const expiresAt = result.rows[0]?.channel_expires_at ? new Date(result.rows[0].channel_expires_at).getTime() : 0;
+  if (expiresAt < Date.now() + 24 * 60 * 60 * 1000) await registerCalendarWatch(userId);
 }
