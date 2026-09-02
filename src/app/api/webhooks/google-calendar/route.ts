@@ -12,6 +12,21 @@ export async function POST(request: Request) {
 	if (!userId || !channelId || !resourceId) return new NextResponse(null, { status: 204 });
 	const result = await pool.query("select 1 from calendar_sync_state where user_id = $1 and channel_id = $2 and channel_resource_id = $3", [userId, channelId, resourceId]);
 	if (!result.rowCount) return new NextResponse(null, { status: 204 });
-	await reconcileCalendar(userId); await regenerateSummaries(userId);
+	try {
+		await reconcileCalendar(userId);
+		console.info("Google Calendar webhook reconciliation complete", { userId });
+		await regenerateSummaries(userId);
+		console.info("Google Calendar webhook summary regeneration complete", { userId });
+	} catch (error: unknown) {
+		const failure = error as { code?: string | number; message?: string; response?: { status?: number; data?: unknown } };
+		console.error("Google Calendar webhook processing failed", {
+			userId,
+			code: failure.code,
+			status: failure.response?.status,
+			message: failure.message ?? "Unknown error",
+			response: failure.response?.data,
+		});
+		// Acknowledge the notification; the daily reconciliation Cron will recover it.
+	}
 	return new NextResponse(null, { status: 204 });
 }
