@@ -1,0 +1,5 @@
+import { NextResponse } from "next/server";
+import { pool } from "@/lib/db";
+import { reconcileCalendar } from "@/lib/sync";
+import { regenerateSummaries } from "@/lib/summaries";
+export async function GET(request: Request) { if (request.headers.get("authorization") !== `Bearer ${process.env.CRON_SECRET}`) return NextResponse.json({ error: "Unauthorized" }, { status: 401 }); const users = await pool.query("select id, timezone, settings from users"); let generated = 0; for (const user of users.rows) { await reconcileCalendar(user.id); const localHour = new Intl.DateTimeFormat("en", { timeZone: user.timezone, hour: "2-digit", hour12: false }).format(new Date()); if (localHour === (user.settings.generationTime ?? "08:00").slice(0, 2)) { await regenerateSummaries(user.id); generated++; } } return NextResponse.json({ users: users.rowCount, generated }); }

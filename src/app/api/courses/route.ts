@@ -1,0 +1,5 @@
+import { NextResponse } from "next/server";
+import { currentUserId } from "@/lib/session";
+import { pool } from "@/lib/db";
+export async function GET() { const userId = await currentUserId(); if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 }); return NextResponse.json((await pool.query("select id, name, position from courses where user_id = $1 order by position, name", [userId])).rows); }
+export async function POST(request: Request) { const userId = await currentUserId(); if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 }); const { name } = await request.json() as { name?: string }; if (!name?.trim()) return NextResponse.json({ error: "name is required" }, { status: 400 }); const result = await pool.query("insert into courses (user_id, name, normalized_name, position) values ($1, $2, lower(trim($2)), coalesce((select max(position) + 1 from courses where user_id = $1), 0)) on conflict (user_id, normalized_name) do update set name = excluded.name returning id, name, position", [userId, name.trim()]); return NextResponse.json(result.rows[0], { status: 201 }); }
