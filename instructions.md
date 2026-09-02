@@ -38,6 +38,10 @@ When a Calendar change notification is received:
 3. Store the new sync token.
 4. Regenerate today's and tomorrow's summary events.
 
+Google Calendar delivers these watch notifications as HTTPS `POST` requests to the registered webhook URL; it does not call the webhook with `GET`.
+
+NOTE: On page reload, the web UI reads the current tasks from Postgres; it does not itself update the db - eg reconcile Google Calendar. A Calendar edit that appears after a dashboard refresh was already applied to Postgres by the webhook or by the scheduled reconciliation Cron.
+
 If Google returns `410 Gone` for the sync token:
 
 1. Discard the old token.
@@ -193,7 +197,6 @@ Support a `Misc` category.
 
 Provide a web UI for:
 
-* summary generation time
 * summary event start time
 * summary event duration
 * number of calendar days included in the lookahead window
@@ -221,6 +224,8 @@ immediately regenerate:
 * tomorrow's summary
 
 The summary-generation logic must be implemented in one shared function so both the Cron and task-change path use the same rules.
+
+For Calendar-originated task changes, the required order is: receive the webhook notification, incrementally reconcile the Calendar change into Postgres, then regenerate both summaries from the updated Postgres tasks.
 
 ## Data model
 

@@ -18,3 +18,20 @@ Snapshot turns specially formatted events in a user's primary Google Calendar in
 - `GET|POST /api/tasks` supports authenticated task reads and manual task creation through Google Calendar.
 
 `vercel.json` configures the hourly reconciliation Cron. Deploy with the project root as the Vercel application directory and add the variables from `.env.example` in the Vercel dashboard.
+
+## Calendar change flow
+
+Google Calendar push notifications are HTTPS `POST` requests; Google does not use `GET` to probe the webhook. A notification only signals that something changed, so the webhook uses the saved Google sync token to fetch the changed events, updates Postgres, and then regenerates the Today and Tomorrow summary events.
+
+```text
+Google Calendar event changes
+  -> POST /api/webhooks/google-calendar
+  -> incremental Calendar reconciliation
+  -> Postgres task update
+  -> Today and Tomorrow summary updates
+```
+
+The dashboard does not receive a browser push from the server so we need to click reload to read the updated db
+
+For webhook renewal: the code registers a watch immediately after Google OAuth connection. Afterward, Vercel invokes the cron at 08:00 UTC every day (0 8 * * *). That cron calls renewCalendarWatchIfNeeded() for every user.
+A watch is re-registered only when its saved expiration is less than 24 hours away (or already expired). It stops the old channel where possible, creates a new one, and stores its returned expiration. So renewal is checked daily and normally happens on the first 08:00 UTC run within 24 hours of expiry—not at a fixed number of days.

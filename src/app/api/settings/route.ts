@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { currentUserId } from "@/lib/session";
 import { pool } from "@/lib/db";
+import { regenerateSummaries } from "@/lib/summaries";
 export async function GET() { const userId = await currentUserId(); if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 }); const row = (await pool.query("select settings from users where id = $1", [userId])).rows[0]; return NextResponse.json(row?.settings ?? {}); }
-export async function PATCH(request: Request) { const userId = await currentUserId(); if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 }); const settings = await request.json(); const result = await pool.query("update users set settings = settings || $1::jsonb, updated_at = now() where id = $2 returning settings", [JSON.stringify(settings), userId]); return NextResponse.json(result.rows[0]?.settings ?? settings); }
+export async function PATCH(request: Request) { const userId = await currentUserId(); if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 }); const settings = await request.json(); const result = await pool.query("update users set settings = settings || $1::jsonb, updated_at = now() where id = $2 returning settings", [JSON.stringify(settings), userId]); await regenerateSummaries(userId); return NextResponse.json(result.rows[0]?.settings ?? settings); }
