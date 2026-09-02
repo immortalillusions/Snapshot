@@ -14,7 +14,7 @@ Snapshot turns specially formatted events in a user's primary Google Calendar in
 
 - `GET /api/auth/google` starts OAuth using the primary Calendar scope.
 - `POST /api/webhooks/google-calendar` receives Calendar push notifications and runs incremental sync.
-- `GET /api/cron/reconcile` is protected by `CRON_SECRET` and reconciles stored sync tokens hourly; summaries regenerate at each user's local configured generation hour.
+- `GET /api/cron/reconcile` is protected by `CRON_SECRET` and reconciles stored sync tokens and regenerates both summaries daily at 08:00 UTC, as configured in `vercel.json`.
 - `GET|POST /api/tasks` supports authenticated task reads and manual task creation through Google Calendar.
 
 `vercel.json` configures the hourly reconciliation Cron. Deploy with the project root as the Vercel application directory and add the variables from `.env.example` in the Vercel dashboard.
