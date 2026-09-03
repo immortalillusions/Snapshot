@@ -1,16 +1,17 @@
 import { randomUUID } from "crypto";
 import { createCalendarClient } from "./google";
-import { courseKey, parseTaskTitle } from "./domain";
+import { courseKey, getDateInTimeZone, getSaturdayOfWeek, parseTaskTitle } from "./domain";
 import { pool, withTransaction } from "./db";
 
 export async function syncCalendar(userId: string, fullSync = false, now = new Date()) {
   const pastEventCutoff = now.getTime() - 7 * 24 * 60 * 60 * 1000;
-  const stateResult = await pool.query("select s.*, u.access_token, u.refresh_token from calendar_sync_state s join users u on u.id = s.user_id where s.user_id = $1", [userId]);
+  const stateResult = await pool.query("select s.*, u.access_token, u.refresh_token, u.timezone from calendar_sync_state s join users u on u.id = s.user_id where s.user_id = $1", [userId]);
   const state = stateResult.rows[0];
   if (!state) throw new Error("Calendar sync state not found");
   const calendar = createCalendarClient(state.access_token, state.refresh_token);
   let pageToken: string | undefined;
   let nextSyncToken: string | undefined;
+  const weeklyWeekStarts = new Set<string>();
   let items: Array<{ id?: string | null; status?: string | null; summary?: string | null; start?: { date?: string | null; dateTime?: string | null } | null }> = [];
   do {
     const response = await calendar.events.list({ calendarId: state.calendar_id, showDeleted: true, singleEvents: true, pageToken, syncToken: fullSync ? undefined : state.sync_token ?? undefined, maxResults: 2500 });
@@ -21,17 +22,20 @@ export async function syncCalendar(userId: string, fullSync = false, now = new D
   await withTransaction(async client => {
     for (const event of items) {
       if (!event.id) continue;
+      const previous = (await client.query("select due_at from tasks where user_id = $1 and google_event_id = $2", [userId, event.id])).rows[0];
+      if (previous) weeklyWeekStarts.add(getSaturdayOfWeek(getDateInTimeZone(new Date(previous.due_at), state.timezone)));
       if (event.status === "cancelled") { await client.query("delete from tasks where user_id = $1 and google_event_id = $2", [userId, event.id]); continue; }
       const parsed = parseTaskTitle(event.summary ?? "");
       if (!parsed || (!event.start?.date && !event.start?.dateTime)) { await client.query("delete from tasks where user_id = $1 and google_event_id = $2", [userId, event.id]); continue; }
       const dueAt = event.start.dateTime ?? `${event.start.date}T00:00:00.000Z`;
       if (new Date(dueAt).getTime() <= pastEventCutoff) { continue; }
+      weeklyWeekStarts.add(getSaturdayOfWeek(getDateInTimeZone(new Date(dueAt), state.timezone)));
       const course = await client.query("insert into courses (user_id, name, normalized_name) values ($1, $2, $3) on conflict (user_id, normalized_name) do update set name = excluded.name returning id", [userId, parsed.course, courseKey(parsed.course)]);
       await client.query("insert into tasks (user_id, course_id, name, due_at, completed, google_event_id) values ($1, $2, $3, $4, $5, $6) on conflict (user_id, google_event_id) do update set course_id = excluded.course_id, name = excluded.name, due_at = excluded.due_at, completed = excluded.completed, updated_at = now()", [userId, course.rows[0].id, parsed.name, dueAt, parsed.completed, event.id]);
     }
     await client.query("update calendar_sync_state set sync_token = $1, updated_at = now() where user_id = $2", [nextSyncToken, userId]);
   });
-  return { changed: items.length, syncToken: nextSyncToken };
+  return { changed: items.length, syncToken: nextSyncToken, weeklyWeekStarts: [...weeklyWeekStarts] };
 }
 
 export async function reconcileCalendar(userId: string) {

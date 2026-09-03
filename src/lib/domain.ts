@@ -34,6 +34,18 @@ export function addCalendarDays(date: string, days: number): string {
   return result.toISOString().slice(0, 10);
 }
 
+export function getSaturdayOfWeek(date: string): string {
+  const value = new Date(`${date}T12:00:00Z`);
+  const daysSinceSaturday = (value.getUTCDay() + 1) % 7;
+  value.setUTCDate(value.getUTCDate() - daysSinceSaturday);
+  return value.toISOString().slice(0, 10);
+}
+
+export function getWeeklySummaryRange(weekStart: string) {
+  const startDate = getSaturdayOfWeek(weekStart);
+  return { startDate, endDate: addCalendarDays(startDate, 8) };
+}
+
 export function selectTasksForSummary(tasks: TaskRecord[], now: Date, lookaheadDays: number, minimumPerCourse: number, timeZone = "UTC", summaryDate = getDateInTimeZone(now, timeZone)) {
   const startDate = summaryDate;
   const endDate = addCalendarDays(startDate, lookaheadDays);
@@ -84,4 +96,32 @@ function formatSummaryTask(task: TaskRecord, endDate: string | undefined, timeZo
 
 function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character);
+}
+
+export function selectTasksForWeeklySummary(tasks: TaskRecord[], weekStart: string, timeZone = "UTC") {
+  const range = getWeeklySummaryRange(weekStart);
+  const byCourse = new Map<string, TaskRecord[]>();
+  for (const task of tasks) {
+    const dueDate = getDateInTimeZone(task.dueAt, timeZone);
+    if (dueDate < range.startDate || dueDate > range.endDate) continue;
+    const key = courseKey(task.course);
+    const courseTasks = byCourse.get(key) ?? [];
+    courseTasks.push(task);
+    byCourse.set(key, courseTasks);
+  }
+  return [...byCourse.entries()].map(([key, courseTasks]) => ({
+    course: courseTasks[0].course,
+    key,
+    tasks: courseTasks.sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime()),
+  }));
+}
+
+export function formatWeeklySummary(sections: ReturnType<typeof selectTasksForWeeklySummary>, order: string[] = [], timeZone = "UTC") {
+  const orderIndex = new Map(order.map((course, index) => [courseKey(course), index]));
+  const ordered = [...sections].sort((a, b) => (orderIndex.get(a.key) ?? Number.MAX_SAFE_INTEGER) - (orderIndex.get(b.key) ?? Number.MAX_SAFE_INTEGER));
+  return ordered
+    .filter(section => section.tasks.some(task => !task.completed))
+    .flatMap(section => [section.course + ":", ...section.tasks.filter(task => !task.completed).map(task => formatSummaryTask(task, undefined, timeZone)), ""])
+    .join("\n")
+    .trim();
 }

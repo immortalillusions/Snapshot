@@ -4,6 +4,7 @@ import { pool } from "@/lib/db";
 import { createCalendarClient } from "@/lib/google";
 import { regenerateSummaries } from "@/lib/summaries";
 import { reconcileCalendar } from "@/lib/sync";
+import { getDateInTimeZone, getSaturdayOfWeek } from "@/lib/domain";
 
 export async function GET() {
   const userId = await currentUserId();
@@ -17,10 +18,11 @@ export async function POST(request: Request) {
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const body = await request.json() as { name?: string; course?: string; dueAt?: string; completed?: boolean };
   if (!body.name?.trim() || !body.course?.trim() || !body.dueAt) return NextResponse.json({ error: "name, course, and dueAt are required" }, { status: 400 });
-  const user = (await pool.query("select u.access_token, u.refresh_token, s.calendar_id from users u join calendar_sync_state s on s.user_id = u.id where u.id = $1", [userId])).rows[0];
+  const user = (await pool.query("select u.access_token, u.refresh_token, u.timezone, s.calendar_id from users u join calendar_sync_state s on s.user_id = u.id where u.id = $1", [userId])).rows[0];
   const title = `${body.completed ? "!" : ""}${body.name.trim()} [${body.course.trim()}]`;
   const event = await createCalendarClient(user.access_token, user.refresh_token).events.insert({ calendarId: user.calendar_id, requestBody: { summary: title, start: { dateTime: body.dueAt }, end: { dateTime: new Date(new Date(body.dueAt).getTime() + 30 * 60000).toISOString() } } });
   await reconcileCalendar(userId);
-  await regenerateSummaries(userId);
+  const weekStart = getSaturdayOfWeek(getDateInTimeZone(new Date(body.dueAt), user.timezone));
+  await regenerateSummaries(userId, new Date(), { weeklyWeekStarts: [weekStart] });
   return NextResponse.json({ id: event.data.id }, { status: 201 });
 }

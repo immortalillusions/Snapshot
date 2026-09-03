@@ -21,3 +21,7 @@ export function createCalendarClient(accessToken: string, refreshToken: string) 
 export function summaryMarker(userId: string, day: "today" | "tomorrow") {
   return `snapshot-summary:${userId}:${day}`;
 }
+
+export function weeklySummaryMarker(userId: string, weekStart: string) {
+  return `snapshot-summary:${userId}:weekly:${weekStart}`;
+}

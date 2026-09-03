@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { formatSummary, parseTaskTitle, selectTasksForSummary, type TaskRecord } from "./domain";
+import { formatSummary, formatWeeklySummary, getSaturdayOfWeek, parseTaskTitle, selectTasksForSummary, selectTasksForWeeklySummary, type TaskRecord } from "./domain";
 
 test("parses only titles whose course marker is the strict suffix", () => {
   assert.deepEqual(parseTaskTitle(" !  Exam [ cs 1100 ] "), { name: "Exam", course: "cs 1100", completed: true });
@@ -32,4 +32,20 @@ test("selects summary dates in the user's timezone", () => {
 
   const result = selectTasksForSummary(tasks, now, 0, 1, "America/New_York");
   assert.deepEqual(result[0].tasks.map(task => task.id), ["today"]);
+});
+
+test("selects the inclusive Saturday through following Sunday weekly range", () => {
+  const tasks: TaskRecord[] = [
+    { id: "before", course: "CS 2214", name: "Before", dueAt: new Date("2026-09-04T12:00:00Z"), completed: false },
+    { id: "start", course: "CS 2214", name: "Start", dueAt: new Date("2026-09-05T12:00:00Z"), completed: false },
+    { id: "end", course: "CS 2214", name: "End", dueAt: new Date("2026-09-13T12:00:00Z"), completed: false },
+    { id: "after", course: "CS 2214", name: "After", dueAt: new Date("2026-09-14T12:00:00Z"), completed: false },
+    { id: "done", course: "CS 2214", name: "Done", dueAt: new Date("2026-09-06T12:00:00Z"), completed: true },
+  ];
+  assert.equal(getSaturdayOfWeek("2026-09-09"), "2026-09-05");
+  const result = selectTasksForWeeklySummary(tasks, "2026-09-05");
+  assert.deepEqual(result[0].tasks.map(task => task.id), ["start", "done", "end"]);
+  const summary = formatWeeklySummary(result);
+  assert.match(summary, /\* Start: Sat, Sep 5, 12:00 PM/);
+  assert.doesNotMatch(summary, /Done|Before|After/);
 });

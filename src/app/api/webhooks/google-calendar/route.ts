@@ -17,9 +17,9 @@ export async function POST(request: Request) {
 		return new NextResponse(null, { status: 204 });
 	}
 	try {
-		await reconcileCalendar(userId);
+		const syncResult = await reconcileCalendar(userId);
 		console.info("Google Calendar webhook reconciliation complete", { userId });
-		await regenerateSummaries(userId);
+		await regenerateSummaries(userId, new Date(), { weeklyWeekStarts: syncResult.weeklyWeekStarts });
 		console.info("Google Calendar webhook summary regeneration complete", { userId });
 	} catch (error: unknown) {
 		const failure = error as { code?: string | number; message?: string; response?: { status?: number; data?: unknown } };

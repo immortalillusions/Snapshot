@@ -7,7 +7,7 @@ create table if not exists users (
   access_token text not null,
   refresh_token text not null,
   timezone text not null default 'UTC',
-  settings jsonb not null default '{"generationTime":"08:00","summaryStartTime":"09:30","summaryDurationMinutes":30,"lookaheadDays":10,"minimumPerCourse":2,"courseOrder":[]}'::jsonb,
+  settings jsonb not null default '{"generationTime":"08:00","summaryStartTime":"09:30","weeklySummaryStartTime":"09:30","summaryDurationMinutes":30,"lookaheadDays":10,"minimumPerCourse":2,"courseOrder":[]}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -44,3 +44,10 @@ create table if not exists tasks (
 );
 
 create index if not exists tasks_due_at_idx on tasks(user_id, due_at);
+
+create table if not exists requested_weekly_summaries (
+  user_id uuid not null references users(id) on delete cascade,
+  week_start date not null,
+  created_at timestamptz not null default now(),
+  primary key (user_id, week_start)
+);
