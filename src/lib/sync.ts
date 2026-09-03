@@ -65,3 +65,16 @@ export async function renewCalendarWatchIfNeeded(userId: string) {
   const expiresAt = result.rows[0]?.channel_expires_at ? new Date(result.rows[0].channel_expires_at).getTime() : 0;
   if (expiresAt < Date.now() + 24 * 60 * 60 * 1000) await registerCalendarWatch(userId);
 }
+
+export async function disconnectCalendar(userId: string) {
+  const result = await pool.query("select s.channel_id, s.channel_resource_id, u.access_token, u.refresh_token from calendar_sync_state s join users u on u.id = s.user_id where s.user_id = $1", [userId]);
+  const state = result.rows[0];
+  if (!state) return false;
+  if (state.channel_id && state.channel_resource_id) {
+    try { await createCalendarClient(state.access_token, state.refresh_token).channels.stop({ requestBody: { id: state.channel_id, resourceId: state.channel_resource_id } }); } catch { /* The channel may already be expired. */ }
+  }
+  await withTransaction(async client => {
+    await client.query("delete from calendar_sync_state where user_id = $1", [userId]);
+  });
+  return true;
+}
