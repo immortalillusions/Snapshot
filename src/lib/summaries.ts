@@ -14,7 +14,7 @@ export async function regenerateSummaries(userId: string, now = new Date()) {
   for (const [day, offset] of [["today", 0], ["tomorrow", 1]] as const) {
     const date = addCalendarDays(getDateInTimeZone(now, user.timezone), offset);
     const sections = selectTasksForSummary(tasks, now, settings.lookaheadDays ?? 10, settings.minimumPerCourse ?? 2, user.timezone, date);
-    const description = formatSummary(sections, order) || "No upcoming tasks.";
+    const description = formatSummary(sections, order, settings.lookaheadDays ?? 10, date, user.timezone) || "No upcoming tasks.";
     const start = `${date}T${settings.summaryStartTime ?? "09:30"}:00`;
     const end = addWallClockMinutes(start, settings.summaryDurationMinutes ?? 30);
     const marker = summaryMarker(userId, day);

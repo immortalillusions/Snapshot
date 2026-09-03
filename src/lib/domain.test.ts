@@ -13,12 +13,14 @@ test("selects the inclusive date window, then the earliest fallback per course",
   const tasks: TaskRecord[] = [
     { id: "a", course: "CS 2214", name: "Today", dueAt: new Date("2026-09-02T08:00:00Z"), completed: false },
     { id: "b", course: "cs 2214", name: "Window end", dueAt: new Date("2026-09-11T23:59:00Z"), completed: false },
-    { id: "c", course: "CS 2214", name: "Fallback", dueAt: new Date("2026-12-01T08:00:00Z"), completed: true },
+    { id: "c", course: "CS 2214", name: "*Fallback", dueAt: new Date("2026-12-01T08:00:00Z"), completed: true },
   ];
   const result = selectTasksForSummary(tasks, now, 10, 3);
   assert.equal(result.length, 1);
   assert.deepEqual(result[0].tasks.map(task => task.id), ["a", "b", "c"]);
-  assert.match(formatSummary(result), /Completed:\n\* Fallback \[CS 2214\]/);
+  const summary = formatSummary(result, [], 10, "2026-09-02", "UTC");
+  assert.match(summary, /\* Today: Wed, Sep 2, 8:00 AM/);
+  assert.match(summary, /<i>\* <b>\*Fallback<\/b>: Tue, Dec 1, 8:00 AM \[CS 2214\]<\/i>/);
 });
 
 test("selects summary dates in the user's timezone", () => {

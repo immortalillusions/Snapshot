@@ -60,16 +60,28 @@ export function selectTasksForSummary(tasks: TaskRecord[], now: Date, lookaheadD
   });
 }
 
-export function formatSummary(sections: ReturnType<typeof selectTasksForSummary>, order: string[] = []) {
+export function formatSummary(sections: ReturnType<typeof selectTasksForSummary>, order: string[] = [], lookaheadDays = 10, summaryDate?: string, timeZone = "UTC") {
   const orderIndex = new Map(order.map((course, index) => [courseKey(course), index]));
   const ordered = [...sections].sort((a, b) => (orderIndex.get(a.key) ?? Number.MAX_SAFE_INTEGER) - (orderIndex.get(b.key) ?? Number.MAX_SAFE_INTEGER));
   const incomplete = ordered.filter(section => section.tasks.some(task => !task.completed));
-  const lines = incomplete.flatMap(section => [section.course + ":", ...section.tasks.filter(task => !task.completed).map(task => `* ${task.name}: ${formatDueAt(task.dueAt)}`), ""]);
+  const endDate = summaryDate ? addCalendarDays(summaryDate, lookaheadDays) : undefined;
+  const lines = incomplete.flatMap(section => [section.course + ":", ...section.tasks.filter(task => !task.completed).map(task => formatSummaryTask(task, endDate, timeZone)), ""]);
   const completed = sections.flatMap(section => section.tasks.filter(task => task.completed)).sort((a, b) => b.dueAt.getTime() - a.dueAt.getTime());
-  if (completed.length) lines.push("Completed:", ...completed.map(task => `* ${task.name} [${task.course}]: ${formatDueAt(task.dueAt)}`));
+  if (completed.length) lines.push("Completed:", ...completed.map(task => formatSummaryTask(task, endDate, timeZone, ` [${escapeHtml(task.course)}]`)));
   return lines.join("\n").trim();
 }
 
-function formatDueAt(value: Date) {
-  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(value);
+function formatDueAt(value: Date, timeZone: string) {
+  return new Intl.DateTimeFormat("en", { timeZone, weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(value);
+}
+
+function formatSummaryTask(task: TaskRecord, endDate: string | undefined, timeZone: string, suffix = "") {
+  const name = escapeHtml(task.name);
+  const formattedName = task.name.trimStart().startsWith("*") ? `<b>${name}</b>` : name;
+  const line = `* ${formattedName}: ${formatDueAt(task.dueAt, timeZone)}${suffix}`;
+  return endDate && getDateInTimeZone(task.dueAt, timeZone) > endDate ? `<i>${line}</i>` : line;
+}
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character);
 }
