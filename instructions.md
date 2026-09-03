@@ -138,6 +138,19 @@ The process must be idempotent: running the generation logic multiple times must
 
 Use a stable identifier/marker so the app can reliably find its generated summary events.
 
+## Weekly summaries
+
+Create/update weekly summary events on Saturdays. Each event covers the inclusive nine-day range from its Saturday through the following Sunday, and is titled `Week of <date>`.
+
+Weekly summaries:
+
+* use a separate configurable weekly start time, defaulting to 9:30 AM
+* reuse the configured summary duration
+* include only incomplete tasks whose calendar date falls in that range
+* use the same course ordering and format as daily summaries, without a `Completed` section
+
+Automatically create weekly summaries from the current Saturday through four calendar months ahead. The web UI must allow users to request multiple specific weeks beyond that range; requested weeks remain subscribed to updates until removed, and removing one deletes its summary event.
+
 ## Which tasks appear in a summary
 
 For each course/category independently:
@@ -202,6 +215,8 @@ Provide a web UI for:
 * number of calendar days included in the lookahead window
 * minimum number of tasks shown per course/category
 * course/category ordering
+* weekly summary start time
+* specific weeks to generate and keep updated
 * manual course creation/editing
 * manual task creation/editing
 
@@ -222,10 +237,11 @@ immediately regenerate:
 
 * today's summary
 * tomorrow's summary
+* all eligible weekly summaries, except that task changes update only weekly summaries whose date range contains the old or new task
 
 The summary-generation logic must be implemented in one shared function so both the Cron and task-change path use the same rules.
 
-For Calendar-originated task changes, the required order is: receive the webhook notification, incrementally reconcile the Calendar change into Postgres, then regenerate both summaries from the updated Postgres tasks.
+For Calendar-originated task changes, the required order is: receive the webhook notification, incrementally reconcile the Calendar change into Postgres, then regenerate the affected summaries from the updated Postgres tasks.
 
 ## Data model
 

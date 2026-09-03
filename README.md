@@ -1,6 +1,6 @@
 # Snapshot
 
-Snapshot turns specially formatted events in a user's primary Google Calendar into course tasks and maintains Today/Tomorrow summary events.
+Snapshot turns specially formatted events in a user's primary Google Calendar into course tasks and maintains daily and weekly summary events.
 
 ## Local setup
 
@@ -16,6 +16,7 @@ Snapshot turns specially formatted events in a user's primary Google Calendar in
 - `POST /api/webhooks/google-calendar` receives Calendar push notifications and runs incremental sync.
 - `GET /api/cron/reconcile` is protected by `CRON_SECRET` and reconciles stored sync tokens and regenerates both summaries daily at 08:00 UTC, as configured in `vercel.json`.
 - `GET|POST /api/tasks` supports authenticated task reads and manual task creation through Google Calendar.
+- `GET|POST /api/weekly-summaries` lists or requests specific weekly summaries; `DELETE /api/weekly-summaries/:weekStart` removes a requested week.
 
 `vercel.json` configures the hourly reconciliation Cron. Deploy with the project root as the Vercel application directory and add the variables from `.env.example` in the Vercel dashboard.
 
@@ -28,8 +29,10 @@ Google Calendar event changes
   -> POST /api/webhooks/google-calendar
   -> incremental Calendar reconciliation
   -> Postgres task update
-  -> Today and Tomorrow summary updates
+  -> daily and affected weekly summary updates
 ```
+
+Weekly summaries are scheduled on Saturday, cover that Saturday through the following Sunday inclusive, and omit completed tasks. They are generated automatically up to four calendar months ahead. Specific weeks can be requested from Settings and remain updated until removed.
 
 The dashboard does not receive a browser push from the server so we need to click reload to read the updated db
 
