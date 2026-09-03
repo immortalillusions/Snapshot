@@ -98,7 +98,7 @@ function formatDueAt(value: Date, timeZone: string) {
 function formatSummaryTask(task: TaskRecord, endDate: string | undefined, timeZone: string, suffix = "") {
   const name = escapeHtml(task.name);
   const formattedName = task.name.trimStart().startsWith("*") ? `<b>${name}</b>` : name;
-  const line = `* ${formattedName}: ${formatDueAt(task.dueAt, timeZone)}${suffix}`;
+  const line = `&bull; ${formattedName}: ${formatDueAt(task.dueAt, timeZone)}${suffix}`;
   return endDate && getDateInTimeZone(task.dueAt, timeZone) > endDate ? `<i>${line}</i>` : line;
 }
 

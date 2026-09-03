@@ -19,8 +19,8 @@ test("selects the inclusive date window, then the earliest fallback per course",
   assert.equal(result.length, 1);
   assert.deepEqual(result[0].tasks.map(task => task.id), ["a", "b", "c"]);
   const summary = formatSummary(result, [], 10, "2026-09-02", "UTC");
-  assert.match(summary, /\* Today: Wed, Sep 2, 8:00 AM/);
-  assert.match(summary, /<i>\* <b>\*Fallback<\/b>: Tue, Dec 1, 8:00 AM \[CS 2214\]<\/i>/);
+  assert.match(summary, /&bull; Today: Wed, Sep 2, 8:00 AM/);
+  assert.match(summary, /<i>&bull; <b>\*Fallback<\/b>: Tue, Dec 1, 8:00 AM \[CS 2214\]<\/i>/);
 });
 
 test("selects summary dates in the user's timezone", () => {
@@ -46,7 +46,7 @@ test("selects the inclusive Saturday through following Sunday weekly range", () 
   const result = selectTasksForWeeklySummary(tasks, "2026-09-05");
   assert.deepEqual(result[0].tasks.map(task => task.id), ["start", "done", "end"]);
   const summary = formatWeeklySummary(result);
-  assert.match(summary, /\* Start: Sat, Sep 5, 12:00 PM/);
+  assert.match(summary, /&bull; Start: Sat, Sep 5, 12:00 PM/);
   assert.doesNotMatch(summary, /Done|Before|After/);
 });
 
