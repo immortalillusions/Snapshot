@@ -28,7 +28,7 @@ async function regenerateDailySummaries(calendar: ReturnType<typeof createCalend
     const date = addCalendarDays(getDateInTimeZone(now, user.timezone), offset);
     const sections = selectTasksForSummary(tasks, now, settings.lookaheadDays ?? 10, settings.minimumPerCourse ?? 2, user.timezone, date);
     const description = formatSummary(sections, order, settings.lookaheadDays ?? 10, date, user.timezone) || "No upcoming tasks.";
-    const start = `${date}T${settings.summaryStartTime ?? "09:30"}:00`;
+    const start = `${date}T${validSummaryTime(settings.summaryStartTime, "09:30")}:00`;
     const end = addWallClockMinutes(start, settings.summaryDurationMinutes ?? 30);
     await upsertCalendarEvent(calendar, user.calendar_id, summaryMarker(userId, day), day === "today" ? "Today" : "Tomorrow", description, start, end, user.timezone);
   }
@@ -37,7 +37,7 @@ async function regenerateDailySummaries(calendar: ReturnType<typeof createCalend
 async function upsertWeeklySummary(calendar: ReturnType<typeof createCalendarClient>, user: SummaryUser, userId: string, tasks: TaskRecord[], order: string[], settings: SummarySettings, weekStart: string) {
   const sections = selectTasksForWeeklySummary(tasks, weekStart, user.timezone);
   const description = formatWeeklySummary(sections, order, user.timezone) || "No upcoming tasks.";
-  const start = `${weekStart}T${settings.weeklySummaryStartTime ?? "09:30"}:00`;
+  const start = `${weekStart}T${validSummaryTime(settings.weeklySummaryStartTime, "09:30")}:00`;
   const end = addWallClockMinutes(start, settings.summaryDurationMinutes ?? 30);
   const title = `Week of ${new Intl.DateTimeFormat("en", { timeZone: user.timezone, month: "short", day: "numeric", year: "numeric" }).format(new Date(`${weekStart}T12:00:00Z`))}`;
   await upsertCalendarEvent(calendar, user.calendar_id, weeklySummaryMarker(userId, weekStart), title, description, start, end, user.timezone);
@@ -69,6 +69,11 @@ function addCalendarMonths(date: string, months: number) {
 
 function addWallClockMinutes(value: string, minutes: number) {
   const wallClock = new Date(`${value}Z`);
+  if (Number.isNaN(wallClock.getTime())) throw new Error(`Invalid summary event start: ${value}`);
   wallClock.setUTCMinutes(wallClock.getUTCMinutes() + minutes);
   return wallClock.toISOString().replace(".000Z", "");
+}
+
+function validSummaryTime(value: string | undefined, fallback: string) {
+  return value && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value) ? value : fallback;
 }
