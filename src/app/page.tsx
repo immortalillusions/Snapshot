@@ -163,7 +163,7 @@ export default function Home() {
     const targetIndex = order.indexOf(target);
     if (sourceIndex < 0 || targetIndex < 0) return;
     order.splice(sourceIndex, 1);
-    order.splice(targetIndex, 0, source);
+    order.splice(sourceIndex < targetIndex ? targetIndex - 1 : targetIndex, 0, source);
     settingsDirty.current = true;
     setSettings((current) => ({ ...current, courseOrder: order }));
   };

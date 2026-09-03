@@ -49,3 +49,13 @@ test("selects the inclusive Saturday through following Sunday weekly range", () 
   assert.match(summary, /\* Start: Sat, Sep 5, 12:00 PM/);
   assert.doesNotMatch(summary, /Done|Before|After/);
 });
+
+test("formats summary sections in the configured course order", () => {
+  const tasks: TaskRecord[] = [
+    { id: "a", name: "Algebra", course: "MATH 2210", dueAt: new Date("2026-09-02T12:00:00Z"), completed: false },
+    { id: "b", name: "Loops", course: "CS 2214", dueAt: new Date("2026-09-02T13:00:00Z"), completed: false },
+  ];
+  const sections = selectTasksForSummary(tasks, new Date("2026-09-02T08:00:00Z"), 10, 2);
+  const summary = formatSummary(sections, ["CS 2214", "MATH 2210"], 10, "2026-09-02", "UTC");
+  assert.ok(summary.indexOf("CS 2214:") < summary.indexOf("MATH 2210:"));
+});
