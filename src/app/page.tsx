@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Bell,
@@ -103,6 +103,7 @@ export default function Home() {
   const [weeklyWeek, setWeeklyWeek] = useState("");
   const [draggedCourse, setDraggedCourse] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const settingsDirty = useRef(false);
   const load = async () => {
     const statusResponse = await fetch("/api/auth/google/status");
     if (statusResponse.ok) setConnected((await statusResponse.json()).connected === true);
@@ -163,8 +164,31 @@ export default function Home() {
     if (sourceIndex < 0 || targetIndex < 0) return;
     order.splice(sourceIndex, 1);
     order.splice(targetIndex, 0, source);
+    settingsDirty.current = true;
     setSettings((current) => ({ ...current, courseOrder: order }));
   };
+  useEffect(() => {
+    if (!settingsDirty.current) return;
+    const timer = window.setTimeout(() => {
+      settingsDirty.current = false;
+      void fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(settings),
+      }).then(async (response) => {
+        if (!response.ok) {
+          settingsDirty.current = true;
+          return;
+        }
+        const nextSettings = await response.json();
+        setSettings((current) => ({ ...current, ...nextSettings }));
+        setCourses((current) =>
+          orderCourses(current, nextSettings.courseOrder ?? []),
+        );
+      });
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [settings]);
   const visible = tasks.filter((task) =>
     activeTab === "Completed" ? task.completed : !task.completed,
   );
@@ -273,22 +297,12 @@ export default function Home() {
       setShowCourse(false);
     });
   };
-  const saveSettings = async () => {
-    await runPending(async () => {
-      const response = await fetch("/api/settings", {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(settings),
-      });
-      if (response.ok) {
-        const nextSettings = await response.json();
-        setSettings((current) => ({ ...current, ...nextSettings }));
-        setCourses((current) =>
-          orderCourses(current, nextSettings.courseOrder ?? []),
-        );
-        setShowSettings(false);
-      }
-    });
+  const updateSettings = <K extends keyof typeof settings>(
+    key: K,
+    value: (typeof settings)[K],
+  ) => {
+    settingsDirty.current = true;
+    setSettings((current) => ({ ...current, [key]: value }));
   };
   const disconnect = async () => {
     if (
@@ -691,10 +705,7 @@ export default function Home() {
                 type="time"
                 value={settings.summaryStartTime}
                 onChange={(event) =>
-                  setSettings({
-                    ...settings,
-                    summaryStartTime: event.target.value,
-                  })
+                  updateSettings("summaryStartTime", event.target.value)
                 }
               />
             </div>
@@ -707,10 +718,7 @@ export default function Home() {
                 type="time"
                 value={settings.weeklySummaryStartTime}
                 onChange={(event) =>
-                  setSettings({
-                    ...settings,
-                    weeklySummaryStartTime: event.target.value,
-                  })
+                  updateSettings("weeklySummaryStartTime", event.target.value)
                 }
               />
             </div>
@@ -725,10 +733,10 @@ export default function Home() {
                 step="5"
                 value={settings.summaryDurationMinutes}
                 onChange={(event) =>
-                  setSettings({
-                    ...settings,
-                    summaryDurationMinutes: Number(event.target.value),
-                  })
+                  updateSettings(
+                    "summaryDurationMinutes",
+                    Number(event.target.value),
+                  )
                 }
               />
             </div>
@@ -740,10 +748,7 @@ export default function Home() {
               <select
                 value={settings.lookaheadDays}
                 onChange={(event) =>
-                  setSettings({
-                    ...settings,
-                    lookaheadDays: Number(event.target.value),
-                  })
+                  updateSettings("lookaheadDays", Number(event.target.value))
                 }
               >
                 <option value={7}>7 days</option>
@@ -759,10 +764,10 @@ export default function Home() {
               <select
                 value={settings.minimumPerCourse}
                 onChange={(event) =>
-                  setSettings({
-                    ...settings,
-                    minimumPerCourse: Number(event.target.value),
-                  })
+                  updateSettings(
+                    "minimumPerCourse",
+                    Number(event.target.value),
+                  )
                 }
               >
                 <option value={1}>1 task</option>
@@ -841,12 +846,6 @@ export default function Home() {
                 ))}
               </div>
             </div>
-            <button
-              className="add-button full"
-              onClick={() => void saveSettings()}
-            >
-              Save preferences <Check size={17} />
-            </button>
             <div className="disconnect-row">
               <div>
                 <strong>Google Calendar</strong>
