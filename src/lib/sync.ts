@@ -28,8 +28,13 @@ export async function syncCalendar(userId: string, fullSync = false, now = new D
       const parsed = parseTaskTitle(event.summary ?? "");
       if (!parsed || (!event.start?.date && !event.start?.dateTime)) { await client.query("delete from tasks where user_id = $1 and google_event_id = $2", [userId, event.id]); continue; }
       const dueAt = event.start.dateTime ?? `${event.start.date}T00:00:00.000Z`;
-      if (new Date(dueAt).getTime() <= pastEventCutoff) { continue; }
-      weeklyWeekStarts.add(getSaturdayOfWeek(getDateInTimeZone(new Date(dueAt), state.timezone)));
+      const dueDate = new Date(dueAt);
+      if (Number.isNaN(dueDate.getTime())) {
+        console.error("Invalid Calendar event date", { eventId: event.id, dateTime: event.start.dateTime, date: event.start.date });
+        continue;
+      }
+      if (dueDate.getTime() <= pastEventCutoff) { continue; }
+      weeklyWeekStarts.add(getSaturdayOfWeek(getDateInTimeZone(dueDate, state.timezone)));
       const course = await client.query("insert into courses (user_id, name, normalized_name) values ($1, $2, $3) on conflict (user_id, normalized_name) do update set name = excluded.name returning id", [userId, parsed.course, courseKey(parsed.course)]);
       await client.query("insert into tasks (user_id, course_id, name, due_at, completed, google_event_id) values ($1, $2, $3, $4, $5, $6) on conflict (user_id, google_event_id) do update set course_id = excluded.course_id, name = excluded.name, due_at = excluded.due_at, completed = excluded.completed, updated_at = now()", [userId, course.rows[0].id, parsed.name, dueAt, parsed.completed, event.id]);
     }

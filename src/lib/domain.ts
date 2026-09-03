@@ -30,12 +30,20 @@ export function getDateInTimeZone(value: Date, timeZone: string): string {
 
 export function addCalendarDays(date: string, days: number): string {
   const result = new Date(`${date}T12:00:00Z`);
+  if (Number.isNaN(result.getTime())) {
+    console.error("Invalid calendar date input", { date, days });
+    throw new Error(`Invalid calendar date: ${date}`);
+  }
   result.setUTCDate(result.getUTCDate() + days);
   return result.toISOString().slice(0, 10);
 }
 
 export function getSaturdayOfWeek(date: string): string {
   const value = new Date(`${date}T12:00:00Z`);
+  if (Number.isNaN(value.getTime())) {
+    console.error("Invalid weekly date input", { date });
+    throw new Error(`Invalid weekly date: ${date}`);
+  }
   const daysSinceSaturday = (value.getUTCDay() + 1) % 7;
   value.setUTCDate(value.getUTCDate() - daysSinceSaturday);
   return value.toISOString().slice(0, 10);

@@ -12,7 +12,13 @@ export async function regenerateSummaries(userId: string, now = new Date(), opti
   if (!user) throw new Error("User not found");
   const settings = user.settings ?? {};
   const tasksResult = await pool.query("select t.id, t.name, t.due_at, t.completed, c.name as course from tasks t join courses c on c.id = t.course_id where t.user_id = $1", [userId]);
-  const tasks: TaskRecord[] = tasksResult.rows.map(row => ({ id: row.id, name: row.name, course: row.course, dueAt: new Date(row.due_at), completed: row.completed }));
+  const tasks: TaskRecord[] = tasksResult.rows.map(row => ({ id: row.id, name: row.name, course: row.course, dueAt: new Date(row.due_at), completed: row.completed })).filter(task => {
+    if (Number.isNaN(task.dueAt.getTime())) {
+      console.error("Invalid stored task date", { taskId: task.id });
+      return false;
+    }
+    return true;
+  });
   const calendar = createCalendarClient(user.access_token, user.refresh_token);
   const order = settings.courseOrder ?? [];
   await regenerateDailySummaries(calendar, user, userId, tasks, order, settings, now);
@@ -63,13 +69,20 @@ async function getAllWeeklySummaryWeeks(userId: string, now: Date, timeZone: str
 
 function addCalendarMonths(date: string, months: number) {
   const result = new Date(`${date}T12:00:00Z`);
+  if (Number.isNaN(result.getTime())) {
+    console.error("Invalid summary cutoff date", { date, months });
+    throw new Error(`Invalid summary cutoff date: ${date}`);
+  }
   result.setUTCMonth(result.getUTCMonth() + months);
   return result.toISOString().slice(0, 10);
 }
 
 function addWallClockMinutes(value: string, minutes: number) {
   const wallClock = new Date(`${value}Z`);
-  if (Number.isNaN(wallClock.getTime())) throw new Error(`Invalid summary event start: ${value}`);
+  if (Number.isNaN(wallClock.getTime())) {
+    console.error("Invalid summary timing", { value, minutes });
+    throw new Error(`Invalid summary event start: ${value}`);
+  }
   wallClock.setUTCMinutes(wallClock.getUTCMinutes() + minutes);
   return wallClock.toISOString().replace(".000Z", "");
 }
