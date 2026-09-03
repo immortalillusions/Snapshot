@@ -63,7 +63,10 @@ async function getAllWeeklySummaryWeeks(userId: string, now: Date, timeZone: str
   const weeks = new Set<string>();
   for (let week = currentWeek; week <= cutoff; week = addCalendarDays(week, 7)) weeks.add(week);
   const requested = await pool.query("select week_start from requested_weekly_summaries where user_id = $1", [userId]);
-  for (const row of requested.rows) weeks.add(getSaturdayOfWeek(String(row.week_start).slice(0, 10)));
+  for (const row of requested.rows) {
+    const weekStart = row.week_start instanceof Date ? getDateInTimeZone(row.week_start, "UTC") : String(row.week_start).slice(0, 10);
+    weeks.add(getSaturdayOfWeek(weekStart));
+  }
   return [...weeks].sort();
 }
 

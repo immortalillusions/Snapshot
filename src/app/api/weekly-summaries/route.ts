@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { currentUserId } from "@/lib/session";
 import { pool } from "@/lib/db";
-import { getSaturdayOfWeek } from "@/lib/domain";
+import { getDateInTimeZone, getSaturdayOfWeek } from "@/lib/domain";
 import { regenerateSummaries } from "@/lib/summaries";
 
 function normalizeWeekStart(value: unknown) {
@@ -14,7 +14,7 @@ export async function GET() {
   const userId = await currentUserId();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const result = await pool.query("select week_start from requested_weekly_summaries where user_id = $1 order by week_start", [userId]);
-  return NextResponse.json(result.rows.map(row => String(row.week_start).slice(0, 10)));
+  return NextResponse.json(result.rows.map(row => row.week_start instanceof Date ? getDateInTimeZone(row.week_start, "UTC") : String(row.week_start).slice(0, 10)));
 }
 
 export async function POST(request: Request) {
