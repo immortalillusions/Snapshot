@@ -22,12 +22,21 @@ export function courseKey(course: string): string {
   return course.trim().toLocaleLowerCase();
 }
 
-export function selectTasksForSummary(tasks: TaskRecord[], now: Date, lookaheadDays: number, minimumPerCourse: number) {
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(end.getDate() + lookaheadDays);
-  end.setHours(23, 59, 59, 999);
+export function getDateInTimeZone(value: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(value);
+  const dateParts = Object.fromEntries(parts.filter(part => part.type !== "literal").map(part => [part.type, part.value]));
+  return `${dateParts.year}-${dateParts.month}-${dateParts.day}`;
+}
+
+export function addCalendarDays(date: string, days: number): string {
+  const result = new Date(`${date}T12:00:00Z`);
+  result.setUTCDate(result.getUTCDate() + days);
+  return result.toISOString().slice(0, 10);
+}
+
+export function selectTasksForSummary(tasks: TaskRecord[], now: Date, lookaheadDays: number, minimumPerCourse: number, timeZone = "UTC", summaryDate = getDateInTimeZone(now, timeZone)) {
+  const startDate = summaryDate;
+  const endDate = addCalendarDays(startDate, lookaheadDays);
 
   const byCourse = new Map<string, TaskRecord[]>();
   for (const task of tasks) {
@@ -39,7 +48,10 @@ export function selectTasksForSummary(tasks: TaskRecord[], now: Date, lookaheadD
 
   return [...byCourse.entries()].map(([key, courseTasks]) => {
     const sorted = [...courseTasks].sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime());
-    const selected = sorted.filter(task => task.dueAt >= start && task.dueAt <= end);
+    const selected = sorted.filter(task => {
+      const dueDate = getDateInTimeZone(task.dueAt, timeZone);
+      return dueDate >= startDate && dueDate <= endDate;
+    });
     for (const task of sorted) {
       if (selected.length >= minimumPerCourse) break;
       if (!selected.includes(task)) selected.push(task);

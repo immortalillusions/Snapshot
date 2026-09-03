@@ -1,5 +1,5 @@
 import { createCalendarClient, summaryMarker } from "./google";
-import { formatSummary, selectTasksForSummary, type TaskRecord } from "./domain";
+import { addCalendarDays, formatSummary, getDateInTimeZone, selectTasksForSummary, type TaskRecord } from "./domain";
 import { pool } from "./db";
 
 export async function regenerateSummaries(userId: string, now = new Date()) {
@@ -12,10 +12,9 @@ export async function regenerateSummaries(userId: string, now = new Date()) {
   const calendar = createCalendarClient(user.access_token, user.refresh_token);
   const order = settings.courseOrder ?? [];
   for (const [day, offset] of [["today", 0], ["tomorrow", 1]] as const) {
-    const target = new Date(now); target.setDate(target.getDate() + offset);
-    const sections = selectTasksForSummary(tasks, target, settings.lookaheadDays ?? 10, settings.minimumPerCourse ?? 2);
+    const date = addCalendarDays(getDateInTimeZone(now, user.timezone), offset);
+    const sections = selectTasksForSummary(tasks, now, settings.lookaheadDays ?? 10, settings.minimumPerCourse ?? 2, user.timezone, date);
     const description = formatSummary(sections, order) || "No upcoming tasks.";
-    const date = target.toISOString().slice(0, 10);
     const start = `${date}T${settings.summaryStartTime ?? "09:30"}:00`;
     const end = addWallClockMinutes(start, settings.summaryDurationMinutes ?? 30);
     const marker = summaryMarker(userId, day);
