@@ -12,6 +12,7 @@ export async function syncCalendar(userId: string, fullSync = false, now = new D
   let pageToken: string | undefined;
   let nextSyncToken: string | undefined;
   const weeklyWeekStarts = new Set<string>();
+  const newCourseNames = new Map<string, string>();
   let items: Array<{ id?: string | null; status?: string | null; summary?: string | null; start?: { date?: string | null; dateTime?: string | null } | null }> = [];
   do {
     const response = await calendar.events.list({ calendarId: state.calendar_id, showDeleted: true, singleEvents: true, pageToken, syncToken: fullSync ? undefined : state.sync_token ?? undefined, maxResults: 2500 });
@@ -35,8 +36,21 @@ export async function syncCalendar(userId: string, fullSync = false, now = new D
       }
       if (dueDate.getTime() <= pastEventCutoff) { continue; }
       weeklyWeekStarts.add(getSaturdayOfWeek(getDateInTimeZone(dueDate, state.timezone)));
-      const course = await client.query("insert into courses (user_id, name, normalized_name) values ($1, $2, $3) on conflict (user_id, normalized_name) do update set name = excluded.name returning id", [userId, parsed.course, courseKey(parsed.course)]);
+      const course = await client.query("insert into courses (user_id, name, normalized_name) values ($1, $2, $3) on conflict (user_id, normalized_name) do update set name = excluded.name returning id, xmax = 0 as inserted", [userId, parsed.course, courseKey(parsed.course)]);
+      if (course.rows[0].inserted) newCourseNames.set(courseKey(parsed.course), parsed.course);
       await client.query("insert into tasks (user_id, course_id, name, due_at, completed, google_event_id) values ($1, $2, $3, $4, $5, $6) on conflict (user_id, google_event_id) do update set course_id = excluded.course_id, name = excluded.name, due_at = excluded.due_at, completed = excluded.completed, updated_at = now()", [userId, course.rows[0].id, parsed.name, dueAt, parsed.completed, event.id]);
+    }
+    if (newCourseNames.size) {
+      const settingsResult = await client.query("select settings from users where id = $1 for update", [userId]);
+      const settings = (settingsResult.rows[0]?.settings ?? {}) as { courseOrder?: unknown };
+      const courseOrder = Array.isArray(settings.courseOrder)
+        ? settings.courseOrder.filter((course): course is string => typeof course === "string")
+        : [];
+      const orderKeys = new Set(courseOrder.map(courseKey));
+      for (const [key, name] of newCourseNames) {
+        if (!orderKeys.has(key)) courseOrder.push(name);
+      }
+      await client.query("update users set settings = settings || jsonb_build_object('courseOrder', $1::jsonb), updated_at = now() where id = $2", [JSON.stringify(courseOrder), userId]);
     }
     await client.query("update calendar_sync_state set sync_token = $1, updated_at = now() where user_id = $2", [nextSyncToken, userId]);
   });

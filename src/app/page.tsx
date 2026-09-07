@@ -164,8 +164,19 @@ export default function Home() {
     if (sourceIndex < 0 || targetIndex < 0) return;
     order.splice(sourceIndex, 1);
     order.splice(sourceIndex < targetIndex ? targetIndex - 1 : targetIndex, 0, source);
-    settingsDirty.current = true;
     setSettings((current) => ({ ...current, courseOrder: order }));
+    void fetch("/api/settings", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ courseOrder: order }),
+    }).then(async (response) => {
+      if (!response.ok) return;
+      const nextSettings = await response.json();
+      setSettings((current) => ({ ...current, ...nextSettings }));
+      setCourses((current) =>
+        orderCourses(current, nextSettings.courseOrder ?? []),
+      );
+    });
   };
   useEffect(() => {
     if (!settingsDirty.current) return;
