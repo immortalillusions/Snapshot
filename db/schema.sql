@@ -4,6 +4,7 @@ create table if not exists users (
   id uuid primary key default gen_random_uuid(),
   google_sub text not null unique,
   email text not null,
+  avatar_url text,
   access_token text not null,
   refresh_token text not null,
   timezone text not null default 'UTC',
@@ -11,6 +12,8 @@ create table if not exists users (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table users add column if not exists avatar_url text;
 
 create table if not exists calendar_sync_state (
   user_id uuid primary key references users(id) on delete cascade,

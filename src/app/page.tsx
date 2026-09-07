@@ -79,6 +79,7 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState("Upcoming");
   const [connected, setConnected] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState("all");
   const [filterStart, setFilterStart] = useState(() =>
@@ -114,9 +115,11 @@ export default function Home() {
       const status = (await statusResponse.json()) as {
         connected?: boolean;
         email?: string | null;
+        avatarUrl?: string | null;
       };
       setConnected(status.connected === true);
       setEmail(status.email ?? null);
+      setAvatarUrl(status.avatarUrl ?? null);
     }
     const response = await fetch("/api/tasks");
     if (!response.ok) return;
@@ -416,7 +419,13 @@ export default function Home() {
             <Settings2 size={18} /> Settings
           </button>
           <div className="profile">
-            <div className="avatar">{email?.charAt(0).toUpperCase() ?? "G"}</div>
+            <div className="avatar">
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="Google profile" />
+              ) : (
+                email?.charAt(0).toUpperCase() ?? ":)"
+              )}
+            </div>
             <div>
               <strong>{email ?? "Google account"}</strong>
             </div>
