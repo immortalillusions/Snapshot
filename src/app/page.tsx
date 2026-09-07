@@ -3,11 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
-  Bell,
-  CalendarDays,
   Check,
   ChevronDown,
-  CircleHelp,
   Clock3,
   Filter,
   GripVertical,
@@ -81,6 +78,13 @@ export default function Home() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [activeTab, setActiveTab] = useState("Upcoming");
   const [connected, setConnected] = useState(false);
+  const [email, setEmail] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const [selectedCourse, setSelectedCourse] = useState("all");
+  const [filterStart, setFilterStart] = useState(() =>
+    new Date().toISOString().slice(0, 10),
+  );
+  const [filterEnd, setFilterEnd] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showCourse, setShowCourse] = useState(false);
@@ -106,7 +110,14 @@ export default function Home() {
   const settingsDirty = useRef(false);
   const load = async () => {
     const statusResponse = await fetch("/api/auth/google/status");
-    if (statusResponse.ok) setConnected((await statusResponse.json()).connected === true);
+    if (statusResponse.ok) {
+      const status = (await statusResponse.json()) as {
+        connected?: boolean;
+        email?: string | null;
+      };
+      setConnected(status.connected === true);
+      setEmail(status.email ?? null);
+    }
     const response = await fetch("/api/tasks");
     if (!response.ok) return;
     const rows = await response.json();
@@ -200,9 +211,15 @@ export default function Home() {
     }, 500);
     return () => window.clearTimeout(timer);
   }, [settings]);
-  const visible = tasks.filter((task) =>
-    activeTab === "Completed" ? task.completed : !task.completed,
-  );
+  const visible = tasks.filter((task) => {
+    if (activeTab === "Completed" ? !task.completed : task.completed)
+      return false;
+    if (selectedCourse !== "all" && task.course !== selectedCourse)
+      return false;
+    const dueDate = task.due_at.slice(0, 10);
+    return (!filterStart || dueDate >= filterStart) &&
+      (!filterEnd || dueDate <= filterEnd);
+  });
   const groupedByCourse = visible.reduce<Record<string, Task[]>>(
     (all, task) => {
       (all[task.course] ||= []).push(task);
@@ -219,6 +236,14 @@ export default function Home() {
     groupedByCourse[course] ? [[course, groupedByCourse[course]] as const] : [],
   );
   const grouped = Object.fromEntries(orderedGroups);
+  const sidebarCourses = courses.length
+    ? courses
+    : [...new Set(tasks.map((task) => task.course))].map((name, index) => ({
+        id: name,
+        name,
+        position: index,
+      }));
+  const filterLabel = selectedCourse === "all" ? "All courses" : selectedCourse;
   const update = async (task: Task) => {
     if (task.id.startsWith("demo-")) {
       setTasks((current) =>
@@ -372,16 +397,6 @@ export default function Home() {
           </span>
           <span>snapshot</span>
         </div>
-        <div className="workspace-label">WORKSPACE</div>
-        <nav className="nav">
-          <button className="nav-item active">
-            <CalendarDays size={18} /> Overview
-          </button>
-          <button className="nav-item">
-            <Check size={18} /> All tasks{" "}
-            <span className="nav-count">{tasks.length}</span>
-          </button>
-        </nav>
         <div className="workspace-label courses-label">
           COURSES{" "}
           <button aria-label="Add course" onClick={() => setShowCourse(true)}>
@@ -389,16 +404,9 @@ export default function Home() {
           </button>
         </div>
         <div className="course-list">
-          {(courses.length
-            ? courses
-            : [...new Set(tasks.map((task) => task.course))].map((name, i) => ({
-                id: name,
-                name,
-                position: i,
-              }))
-          ).map((course) => (
+          {sidebarCourses.map((course, index) => (
             <span key={course.id}>
-              <i className={`dot ${colors[course.position % colors.length]}`} />{" "}
+              <i className={`dot ${colors[index % colors.length]}`} />{" "}
               {course.name}
             </span>
           ))}
@@ -407,16 +415,10 @@ export default function Home() {
           <button className="nav-item" onClick={() => setShowSettings(true)}>
             <Settings2 size={18} /> Settings
           </button>
-          <button className="nav-item">
-            <CircleHelp size={18} /> Help center
-          </button>
           <div className="profile">
-            <div className="avatar">JL</div>
+            <div className="avatar">{email?.charAt(0).toUpperCase() ?? "G"}</div>
             <div>
-              <strong>Jordan Lee</strong>
-              <small>
-                {connected ? "Calendar connected" : "Demo workspace"}
-              </small>
+              <strong>{email ?? "Google account"}</strong>
             </div>
           </div>
         </div>
@@ -432,9 +434,6 @@ export default function Home() {
             </span>
           </div>
           <div className="top-actions">
-            <button className="icon-button" aria-label="Notifications">
-              <Bell size={18} />
-            </button>
             {connected ? (
               <button
                 className="settings-link"
@@ -504,9 +503,59 @@ export default function Home() {
               </button>
             ))}
           </div>
-          <button className="filter-button">
-            <Filter size={15} /> All courses <ChevronDown size={14} />
-          </button>
+          <div className="filter-control">
+            <button
+              className="filter-button"
+              onClick={() => setShowFilters((current) => !current)}
+              aria-expanded={showFilters}
+            >
+              <Filter size={15} /> {filterLabel} <ChevronDown size={14} />
+            </button>
+            {showFilters && (
+              <div className="filter-menu">
+                <label>
+                  Course
+                  <select
+                    value={selectedCourse}
+                    onChange={(event) => setSelectedCourse(event.target.value)}
+                  >
+                    <option value="all">All courses</option>
+                    {orderedCourseNames.map((course) => (
+                      <option key={course} value={course}>{course}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Start date
+                  <input
+                    type="date"
+                    value={filterStart}
+                    onChange={(event) => setFilterStart(event.target.value)}
+                  />
+                </label>
+                <label>
+                  End date
+                  <input
+                    type="date"
+                    min={filterStart || undefined}
+                    value={filterEnd}
+                    onChange={(event) => setFilterEnd(event.target.value)}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="filter-reset"
+                  onClick={() => {
+                    setSelectedCourse("all");
+                    setFilterStart(new Date().toISOString().slice(0, 10));
+                    setFilterEnd("");
+                  }}
+                >
+                  Reset filters
+                </button>
+              </div>
+            )}
+          </div>
         </div>
         <div className="task-area">
           {Object.entries(grouped).map(([course, courseTasks]) => (
@@ -577,9 +626,6 @@ export default function Home() {
               ? "Summary events update automatically"
               : "Preview data only"}
           </span>
-          <button>
-            <CalendarDays size={14} /> View calendar
-          </button>
         </footer>
       </section>
       {showAdd && (
