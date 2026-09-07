@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
+  Camera,
   Check,
   ChevronDown,
   Clock3,
@@ -12,7 +13,6 @@ import {
   Pencil,
   Plus,
   Settings2,
-  Sparkles,
   Trash2,
   X,
 } from "lucide-react";
@@ -51,7 +51,7 @@ function LandingPage() {
     <main className="landing-page">
       <header className="landing-nav">
         <Link className="landing-brand" href="/">
-          <span className="brand-mark"><Sparkles size={16} /></span>
+          <span className="brand-mark"><Camera size={16} /></span>
           <span>snapshot</span>
         </Link>
         <span className="landing-note">A calmer view of what&apos;s ahead</span>
@@ -396,7 +396,7 @@ export default function Home() {
       <aside className="sidebar">
         <div className="brand">
           <span className="brand-mark">
-            <Sparkles size={17} />
+            <Camera size={17} />
           </span>
           <span>snapshot</span>
         </div>
