@@ -88,7 +88,6 @@ export default function Home() {
   const [filterEnd, setFilterEnd] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [showCourse, setShowCourse] = useState(false);
   const [editing, setEditing] = useState<Task | null>(null);
   const [form, setForm] = useState({
     name: "",
@@ -320,22 +319,6 @@ export default function Home() {
       await load();
     });
   };
-  const addCourse = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const name = String(
-      new FormData(event.currentTarget).get("name") || "",
-    ).trim();
-    if (!name) return;
-    await runPending(async () => {
-      const response = await fetch("/api/courses", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
-      if (response.ok) await load();
-      setShowCourse(false);
-    });
-  };
   const updateSettings = <K extends keyof typeof settings>(
     key: K,
     value: (typeof settings)[K],
@@ -400,12 +383,7 @@ export default function Home() {
           </span>
           <span>snapshot</span>
         </div>
-        <div className="workspace-label courses-label">
-          COURSES{" "}
-          <button aria-label="Add course" onClick={() => setShowCourse(true)}>
-            <Plus size={15} />
-          </button>
-        </div>
+        <div className="workspace-label courses-label">COURSES</div>
         <div className="course-list">
           {sidebarCourses.map((course, index) => (
             <span key={course.id}>
@@ -713,36 +691,6 @@ export default function Home() {
             </label>
             <button className="add-button full" type="submit">
               {editing ? "Save changes" : "Create task"} <Check size={17} />
-            </button>
-          </form>
-        </div>
-      )}
-      {showCourse && (
-        <div className="modal-backdrop" onClick={() => setShowCourse(false)}>
-          <form
-            className="modal"
-            onClick={(event) => event.stopPropagation()}
-            onSubmit={addCourse}
-          >
-            <div className="modal-head">
-              <div>
-                <span className="eyebrow">COURSES</span>
-                <h2>New course</h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowCourse(false)}
-                aria-label="Close"
-              >
-                <X size={19} />
-              </button>
-            </div>
-            <label>
-              Course name
-              <input name="name" placeholder="e.g. HIST 1100" autoFocus />
-            </label>
-            <button className="add-button full" type="submit">
-              Add course <Plus size={17} />
             </button>
           </form>
         </div>

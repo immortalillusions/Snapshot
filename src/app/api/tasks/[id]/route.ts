@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { currentUserId } from "@/lib/session";
 import { pool } from "@/lib/db";
 import { createCalendarClient } from "@/lib/google";
-import { reconcileCalendar } from "@/lib/sync";
+import { reconcileCalendar, synchronizeCourses } from "@/lib/sync";
 import { regenerateSummaries } from "@/lib/summaries";
 import { getDateInTimeZone, getSaturdayOfWeek } from "@/lib/domain";
 
@@ -29,6 +29,8 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   const row = await context((await params).id);
   if (!row) return NextResponse.json({ error: "Task not found" }, { status: 404 });
   await createCalendarClient(row.access_token, row.refresh_token).events.delete({ calendarId: row.calendar_id, eventId: row.google_event_id });
-  await pool.query("delete from tasks where id = $1", [row.id]); await regenerateSummaries(row.user_id, new Date(), { weeklyWeekStarts: [getSaturdayOfWeek(getDateInTimeZone(new Date(row.due_at), row.timezone))] });
+  await pool.query("delete from tasks where id = $1", [row.id]);
+  await synchronizeCourses(pool, row.user_id);
+  await regenerateSummaries(row.user_id, new Date(), { weeklyWeekStarts: [getSaturdayOfWeek(getDateInTimeZone(new Date(row.due_at), row.timezone))] });
   return new NextResponse(null, { status: 204 });
 }
