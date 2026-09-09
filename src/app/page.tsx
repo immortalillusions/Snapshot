@@ -1,5 +1,7 @@
 "use client";
 
+/** Snapshot's OAuth landing page and authenticated task dashboard. */
+
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
@@ -26,6 +28,9 @@ type Task = {
   color: string;
 };
 type Course = { id: string; name: string; position: number };
+const jsonHeaders = { "content-type": "application/json" };
+
+/** Sorts known courses by saved order, then alphabetically. */
 const orderCourses = (courses: Course[], courseOrder: string[]) =>
   [...courses].sort((left, right) => {
     const leftIndex = courseOrder.indexOf(left.name);
@@ -37,15 +42,20 @@ const orderCourses = (courses: Course[], courseOrder: string[]) =>
     );
   });
 const colors = ["coral", "blue", "green", "yellow"];
+
+/** Formats a task's compact due-date label. */
 const dateLabel = (value: string) =>
   new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(
     new Date(value),
   );
+
+/** Formats a task's compact due-time label. */
 const timeLabel = (value: string) =>
   new Intl.DateTimeFormat("en", { hour: "numeric", minute: "2-digit" }).format(
     new Date(value),
   );
 
+/** Renders the Google sign-in experience for disconnected visitors. */
 function LandingPage() {
   return (
     <main className="landing-page">
@@ -73,6 +83,7 @@ function LandingPage() {
   );
 }
 
+/** Renders the authenticated dashboard and coordinates its API operations. */
 export default function Home() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -108,6 +119,8 @@ export default function Home() {
   const [draggedCourse, setDraggedCourse] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const settingsDirty = useRef(false);
+
+  /** Reloads account, task, course, settings, and weekly-summary state. */
   const load = async () => {
     const statusResponse = await fetch("/api/auth/google/status");
     if (statusResponse.ok) {
@@ -129,19 +142,23 @@ export default function Home() {
         color: colors[i % colors.length],
       })),
     );
-    const cr = await fetch("/api/courses");
-    const courseRows = cr.ok ? ((await cr.json()) as Course[]) : [];
-    const sr = await fetch("/api/settings");
-    const nextSettings = sr.ok ? await sr.json() : { courseOrder: [] };
+    const courseResponse = await fetch("/api/courses");
+    const courseRows = courseResponse.ok
+      ? ((await courseResponse.json()) as Course[])
+      : [];
+    const settingsResponse = await fetch("/api/settings");
+    const nextSettings = settingsResponse.ok
+      ? await settingsResponse.json()
+      : { courseOrder: [] };
     setCourses(orderCourses(courseRows, nextSettings.courseOrder ?? []));
-    if (sr.ok)
+    if (settingsResponse.ok)
       setSettings((current) => ({
         ...current,
         ...nextSettings,
         weeklySummaryStartTime: nextSettings.weeklySummaryStartTime ?? "09:30",
       }));
-    const wr = await fetch("/api/weekly-summaries");
-    if (wr.ok) setRequestedWeeks(await wr.json());
+    const weeksResponse = await fetch("/api/weekly-summaries");
+    if (weeksResponse.ok) setRequestedWeeks(await weeksResponse.json());
   };
   // Initial hydration synchronizes the client with the authenticated API state.
   useEffect(() => {
@@ -155,6 +172,8 @@ export default function Home() {
       delete document.body.dataset.processing;
     };
   }, [isProcessing]);
+
+  /** Prevents overlapping mutations while reporting pending state globally. */
   const runPending = async <T,>(work: () => Promise<T>) => {
     if (isProcessing) return;
     setIsProcessing(true);
@@ -169,6 +188,8 @@ export default function Home() {
     ...courses.map((course) => course.name),
     ...tasks.map((task) => task.course),
   ].filter((course, index, all) => course && all.indexOf(course) === index);
+
+  /** Moves a course in the saved summary order. */
   const reorderCourse = (source: string, target: string) => {
     if (source === target) return;
     const order = [...orderedCourseNames];
@@ -180,7 +201,7 @@ export default function Home() {
     setSettings((current) => ({ ...current, courseOrder: order }));
     void fetch("/api/settings", {
       method: "PATCH",
-      headers: { "content-type": "application/json" },
+      headers: jsonHeaders,
       body: JSON.stringify({ courseOrder: order }),
     }).then(async (response) => {
       if (!response.ok) return;
@@ -197,7 +218,7 @@ export default function Home() {
       settingsDirty.current = false;
       void fetch("/api/settings", {
         method: "PATCH",
-        headers: { "content-type": "application/json" },
+        headers: jsonHeaders,
         body: JSON.stringify(settings),
       }).then(async (response) => {
         if (!response.ok) {
@@ -246,6 +267,8 @@ export default function Home() {
         position: index,
       }));
   const filterLabel = selectedCourse === "all" ? "All courses" : selectedCourse;
+
+  /** Persists a task update, or updates local state for a demo task. */
   const update = async (task: Task) => {
     if (task.id.startsWith("demo-")) {
       setTasks((current) =>
@@ -256,7 +279,7 @@ export default function Home() {
     await runPending(async () => {
       await fetch(`/api/tasks/${task.id}`, {
         method: "PATCH",
-        headers: { "content-type": "application/json" },
+        headers: jsonHeaders,
         body: JSON.stringify({
           name: task.name,
           course: task.course,
@@ -267,6 +290,8 @@ export default function Home() {
       await load();
     });
   };
+
+  /** Opens the task form with either an existing task or fresh defaults. */
   const openEditor = (task?: Task) => {
     setEditing(task ?? null);
     setForm(
@@ -286,6 +311,8 @@ export default function Home() {
     );
     setShowAdd(true);
   };
+
+  /** Creates or updates the task represented by the form. */
   const saveTask = async () => {
     if (!form.name.trim()) return;
     if (editing)
@@ -300,7 +327,7 @@ export default function Home() {
       await runPending(async () => {
         const response = await fetch("/api/tasks", {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: jsonHeaders,
           body: JSON.stringify({
             name: form.name,
             course: form.course,
@@ -313,12 +340,16 @@ export default function Home() {
     setShowAdd(false);
     setEditing(null);
   };
+
+  /** Deletes a task and reloads server-backed state. */
   const remove = async (task: Task) => {
     await runPending(async () => {
       await fetch(`/api/tasks/${task.id}`, { method: "DELETE" });
       await load();
     });
   };
+
+  /** Marks settings dirty and applies an optimistic local value. */
   const updateSettings = <K extends keyof typeof settings>(
     key: K,
     value: (typeof settings)[K],
@@ -326,6 +357,8 @@ export default function Home() {
     settingsDirty.current = true;
     setSettings((current) => ({ ...current, [key]: value }));
   };
+
+  /** Confirms and disconnects the current Google Calendar account. */
   const disconnect = async () => {
     if (
       !window.confirm(
@@ -343,12 +376,14 @@ export default function Home() {
       }
     });
   };
+
+  /** Subscribes to a selected weekly summary date. */
   const requestWeeklyWeek = async () => {
     if (!weeklyWeek) return;
     await runPending(async () => {
       const response = await fetch("/api/weekly-summaries", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: jsonHeaders,
         body: JSON.stringify({ weekStart: weeklyWeek }),
       });
       if (response.ok) {
@@ -360,6 +395,8 @@ export default function Home() {
       }
     });
   };
+
+  /** Removes a requested weekly summary subscription. */
   const removeWeeklyWeek = async (weekStart: string) => {
     await runPending(async () => {
       const response = await fetch(`/api/weekly-summaries/${weekStart}`, {
@@ -399,6 +436,8 @@ export default function Home() {
           <div className="profile">
             <div className="avatar">
               {avatarUrl ? (
+                // OAuth profile images can come from user-specific remote hosts.
+                // eslint-disable-next-line @next/next/no-img-element
                 <img src={avatarUrl} alt="Google profile" />
               ) : (
                 email?.charAt(0).toUpperCase() ?? ":)"
@@ -414,25 +453,16 @@ export default function Home() {
         <header className="topbar">
           <div className="mobile-brand">snapshot</div>
           <div className="sync-status">
-            <span className="pulse" />{" "}
-            {connected ? "Synced with Google Calendar" : "Preview mode"}{" "}
-            <span className="sync-time">
-              {connected ? "just now" : "connect to sync"}
-            </span>
+            <span className="pulse" /> Synced with Google Calendar{" "}
+            <span className="sync-time">just now</span>
           </div>
           <div className="top-actions">
-            {connected ? (
-              <button
-                className="settings-link"
-                onClick={() => setShowSettings(true)}
-              >
-                <Settings2 size={17} /> Settings
-              </button>
-            ) : (
-              <a className="settings-link" href="/api/auth/google">
-                <Link2 size={17} /> Connect Google
-              </a>
-            )}
+            <button
+              className="settings-link"
+              onClick={() => setShowSettings(true)}
+            >
+              <Settings2 size={17} /> Settings
+            </button>
           </div>
         </header>
         <div className="page-heading">
@@ -470,7 +500,7 @@ export default function Home() {
           <div className="strip-spacer" />
           <div className="calendar-chip">
             <Link2 size={16} />
-            <span>{connected ? "Calendar connected" : "Demo data"}</span>
+            <span>Calendar connected</span>
           </div>
         </div>
         <div className="task-toolbar">
@@ -609,9 +639,7 @@ export default function Home() {
         <footer className="content-footer">
           <span>
             <span className="footer-dot" />{" "}
-            {connected
-              ? "Summary events update automatically"
-              : "Preview data only"}
+            Summary events update automatically
           </span>
         </footer>
       </section>

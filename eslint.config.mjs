@@ -1,3 +1,5 @@
+/** ESLint rules for Next.js, React, and TypeScript source files. */
+
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTypeScript from "eslint-config-next/typescript";
 

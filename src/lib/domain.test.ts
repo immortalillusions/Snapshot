@@ -1,6 +1,8 @@
+/** Unit coverage for task parsing and summary domain rules. */
+
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { formatSummary, formatWeeklySummary, getSaturdayOfWeek, parseTaskTitle, selectTasksForSummary, selectTasksForWeeklySummary, type TaskRecord } from "./domain";
+import { formatSummary, formatWeeklySummary, getSaturdayOfWeek, normalizeWeekStart, parseTaskTitle, selectTasksForSummary, selectTasksForWeeklySummary, type TaskRecord } from "./domain";
 
 test("parses only titles whose course marker is the strict suffix", () => {
   assert.deepEqual(parseTaskTitle(" !  Exam [ cs 1100 ] "), { name: "Exam", course: "cs 1100", completed: true });
@@ -48,6 +50,14 @@ test("selects the inclusive Saturday through following Sunday weekly range", () 
   const summary = formatWeeklySummary(result);
   assert.match(summary, /• Start: Sat, Sep 5, 12:00 PM/);
   assert.doesNotMatch(summary, /Done|Before|After/);
+});
+
+test("normalizes valid week dates and rejects malformed values", () => {
+  assert.equal(normalizeWeekStart("2026-09-09"), "2026-09-05");
+  assert.equal(normalizeWeekStart("2026-09-05"), "2026-09-05");
+  assert.equal(normalizeWeekStart("September 9, 2026"), null);
+  assert.equal(normalizeWeekStart("not-a-date"), null);
+  assert.equal(normalizeWeekStart(undefined), null);
 });
 
 test("formats summary sections in the configured course order", () => {

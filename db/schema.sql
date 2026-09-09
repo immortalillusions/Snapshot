@@ -1,3 +1,5 @@
+-- PostgreSQL schema for users, Calendar sync state, courses, and tasks.
+
 create extension if not exists pgcrypto;
 
 create table if not exists users (

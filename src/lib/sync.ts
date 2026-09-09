@@ -1,9 +1,14 @@
+/** Google Calendar synchronization, course maintenance, and watch lifecycle. */
+
 import { randomUUID } from "crypto";
 import { createCalendarClient } from "./google";
 import { courseKey, getDateInTimeZone, getSaturdayOfWeek, parseTaskTitle } from "./domain";
 import { pool, withTransaction } from "./db";
 import type { Pool, PoolClient } from "pg";
 
+type CalendarClient = ReturnType<typeof createCalendarClient>;
+
+/** Removes empty courses and keeps the saved course order aligned with active courses. */
 export async function synchronizeCourses(client: Pool | PoolClient, userId: string, newCourseNames = new Map<string, string>()) {
   await client.query("delete from courses c where c.user_id = $1 and not exists (select 1 from tasks t where t.course_id = c.id)", [userId]);
   const settingsResult = await client.query("select settings from users where id = $1 for update", [userId]);
@@ -23,6 +28,7 @@ export async function synchronizeCourses(client: Pool | PoolClient, userId: stri
   }
 }
 
+/** Applies a full or incremental Calendar event page set to local tasks. */
 export async function syncCalendar(userId: string, fullSync = false, now = new Date()) {
   const pastEventCutoff = now.getTime() - 7 * 24 * 60 * 60 * 1000;
   const stateResult = await pool.query("select s.*, u.access_token, u.refresh_token, u.timezone from calendar_sync_state s join users u on u.id = s.user_id where s.user_id = $1", [userId]);
@@ -34,6 +40,7 @@ export async function syncCalendar(userId: string, fullSync = false, now = new D
   const weeklyWeekStarts = new Set<string>();
   const newCourseNames = new Map<string, string>();
   let items: Array<{ id?: string | null; status?: string | null; summary?: string | null; start?: { date?: string | null; dateTime?: string | null } | null }> = [];
+  // Fetch every page before committing the new sync token.
   do {
     const response = await calendar.events.list({ calendarId: state.calendar_id, showDeleted: true, singleEvents: true, pageToken, syncToken: fullSync ? undefined : state.sync_token ?? undefined, maxResults: 2500 });
     items = items.concat(response.data.items ?? []);
@@ -43,6 +50,7 @@ export async function syncCalendar(userId: string, fullSync = false, now = new D
   await withTransaction(async client => {
     for (const event of items) {
       if (!event.id) continue;
+      // Track both old and new weeks so moved tasks refresh each affected summary.
       const previous = (await client.query("select due_at from tasks where user_id = $1 and google_event_id = $2", [userId, event.id])).rows[0];
       if (previous) weeklyWeekStarts.add(getSaturdayOfWeek(getDateInTimeZone(new Date(previous.due_at), state.timezone)));
       if (event.status === "cancelled") { await client.query("delete from tasks where user_id = $1 and google_event_id = $2", [userId, event.id]); continue; }
@@ -66,11 +74,24 @@ export async function syncCalendar(userId: string, fullSync = false, now = new D
   return { changed: items.length, syncToken: nextSyncToken, weeklyWeekStarts: [...weeklyWeekStarts] };
 }
 
+/** Reconciles incrementally, falling back to a full sync for an expired token. */
 export async function reconcileCalendar(userId: string) {
   try { return await syncCalendar(userId); }
   catch (error: unknown) { const status = (error as { code?: number; response?: { status?: number } }).response?.status ?? (error as { code?: number }).code; if (status === 410) { await pool.query("update calendar_sync_state set sync_token = null where user_id = $1", [userId]); return syncCalendar(userId, true); } throw error; }
 }
 
+/** Stops a Calendar watch, tolerating channels that have already expired. */
+async function stopCalendarWatch(calendar: CalendarClient, channelId: string, resourceId: string) {
+  try {
+    await calendar.channels.stop({
+      requestBody: { id: channelId, resourceId },
+    });
+  } catch {
+    // Google may expire or remove a channel before local state is refreshed.
+  }
+}
+
+/** Replaces the user's Calendar watch and stores the new channel metadata. */
 export async function registerCalendarWatch(userId: string) {
   const result = await pool.query("select s.*, u.access_token, u.refresh_token from calendar_sync_state s join users u on u.id = s.user_id where s.user_id = $1", [userId]);
   const state = result.rows[0];
@@ -79,7 +100,7 @@ export async function registerCalendarWatch(userId: string) {
   if (process.env.NODE_ENV === "production" && !appUrl.startsWith("https://")) throw new Error("APP_URL must be a public HTTPS URL for Calendar webhooks");
   const calendar = createCalendarClient(state.access_token, state.refresh_token);
   if (state.channel_id && state.channel_resource_id) {
-    try { await calendar.channels.stop({ requestBody: { id: state.channel_id, resourceId: state.channel_resource_id } }); } catch { /* The old channel may already be expired. */ }
+    await stopCalendarWatch(calendar, state.channel_id, state.channel_resource_id);
   }
   const webhookAddress = `${appUrl}/api/webhooks/google-calendar`;
   console.info("Registering Google Calendar watch", { webhookAddress, calendarId: state.calendar_id });
@@ -88,18 +109,21 @@ export async function registerCalendarWatch(userId: string) {
   await pool.query("update calendar_sync_state set channel_id = $1, channel_resource_id = $2, channel_expires_at = to_timestamp($3::double precision / 1000), updated_at = now() where user_id = $4", [response.data.id, response.data.resourceId, response.data.expiration, userId]);
 }
 
+/** Renews watches that expire within the next day. */
 export async function renewCalendarWatchIfNeeded(userId: string) {
   const result = await pool.query("select channel_expires_at from calendar_sync_state where user_id = $1", [userId]);
   const expiresAt = result.rows[0]?.channel_expires_at ? new Date(result.rows[0].channel_expires_at).getTime() : 0;
   if (expiresAt < Date.now() + 24 * 60 * 60 * 1000) await registerCalendarWatch(userId);
 }
 
+/** Stops the user's watch and removes local synchronization state. */
 export async function disconnectCalendar(userId: string) {
   const result = await pool.query("select s.channel_id, s.channel_resource_id, u.access_token, u.refresh_token from calendar_sync_state s join users u on u.id = s.user_id where s.user_id = $1", [userId]);
   const state = result.rows[0];
   if (!state) return false;
   if (state.channel_id && state.channel_resource_id) {
-    try { await createCalendarClient(state.access_token, state.refresh_token).channels.stop({ requestBody: { id: state.channel_id, resourceId: state.channel_resource_id } }); } catch { /* The channel may already be expired. */ }
+    const calendar = createCalendarClient(state.access_token, state.refresh_token);
+    await stopCalendarWatch(calendar, state.channel_id, state.channel_resource_id);
   }
   await withTransaction(async client => {
     await client.query("delete from calendar_sync_state where user_id = $1", [userId]);

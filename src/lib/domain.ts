@@ -1,3 +1,5 @@
+/** Pure task parsing, calendar-date, selection, and summary-formatting helpers. */
+
 export type TaskRecord = {
   id: string;
   course: string;
@@ -10,6 +12,7 @@ export type ParsedTaskTitle = { name: string; course: string; completed: boolean
 
 const taskTitlePattern = /^(\!)?\s*(.+?)\s*\[\s*([^\]]+?)\s*\]$/;
 
+/** Parses a task title only when its course marker is the final token. */
 export function parseTaskTitle(title: string): ParsedTaskTitle {
   const match = title.trim().match(taskTitlePattern);
   if (!match) return null;
@@ -18,16 +21,19 @@ export function parseTaskTitle(title: string): ParsedTaskTitle {
   return name && course ? { name, course, completed: Boolean(match[1]) } : null;
 }
 
+/** Returns the case-insensitive key used to match courses. */
 export function courseKey(course: string): string {
   return course.trim().toLocaleLowerCase();
 }
 
+/** Converts an instant to a calendar date in the requested time zone. */
 export function getDateInTimeZone(value: Date, timeZone: string): string {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(value);
   const dateParts = Object.fromEntries(parts.filter(part => part.type !== "literal").map(part => [part.type, part.value]));
   return `${dateParts.year}-${dateParts.month}-${dateParts.day}`;
 }
 
+/** Adds whole calendar days to an ISO date without applying a local time zone. */
 export function addCalendarDays(date: string, days: number): string {
   const result = new Date(`${date}T12:00:00Z`);
   if (Number.isNaN(result.getTime())) {
@@ -38,6 +44,7 @@ export function addCalendarDays(date: string, days: number): string {
   return result.toISOString().slice(0, 10);
 }
 
+/** Returns the Saturday that starts the nine-day summary period. */
 export function getSaturdayOfWeek(date: string): string {
   const value = new Date(`${date}T12:00:00Z`);
   if (Number.isNaN(value.getTime())) {
@@ -49,11 +56,20 @@ export function getSaturdayOfWeek(date: string): string {
   return value.toISOString().slice(0, 10);
 }
 
+/** Validates a date-like value and normalizes it to its week's Saturday. */
+export function normalizeWeekStart(value: unknown): string | null {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const date = new Date(`${value}T12:00:00Z`);
+  return Number.isNaN(date.getTime()) ? null : getSaturdayOfWeek(value);
+}
+
+/** Returns the inclusive Saturday-through-Sunday weekly summary range. */
 export function getWeeklySummaryRange(weekStart: string) {
   const startDate = getSaturdayOfWeek(weekStart);
   return { startDate, endDate: addCalendarDays(startDate, 8) };
 }
 
+/** Selects in-window tasks and fills each course to its configured minimum. */
 export function selectTasksForSummary(tasks: TaskRecord[], now: Date, lookaheadDays: number, minimumPerCourse: number, timeZone = "UTC", summaryDate = getDateInTimeZone(now, timeZone)) {
   const startDate = summaryDate;
   const endDate = addCalendarDays(startDate, lookaheadDays);
@@ -80,6 +96,7 @@ export function selectTasksForSummary(tasks: TaskRecord[], now: Date, lookaheadD
   });
 }
 
+/** Formats daily summary sections in configured course order. */
 export function formatSummary(sections: ReturnType<typeof selectTasksForSummary>, order: string[] = [], lookaheadDays = 10, summaryDate?: string, timeZone = "UTC") {
   const orderIndex = new Map(order.map((course, index) => [courseKey(course), index]));
   const ordered = [...sections].sort((a, b) => (orderIndex.get(a.key) ?? Number.MAX_SAFE_INTEGER) - (orderIndex.get(b.key) ?? Number.MAX_SAFE_INTEGER));
@@ -91,10 +108,12 @@ export function formatSummary(sections: ReturnType<typeof selectTasksForSummary>
   return lines.join("\n").trim();
 }
 
+/** Formats a due date for calendar summary descriptions. */
 function formatDueAt(value: Date, timeZone: string) {
   return new Intl.DateTimeFormat("en", { timeZone, weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(value);
 }
 
+/** Formats one task and italicizes fallback tasks beyond the date window. */
 function formatSummaryTask(task: TaskRecord, endDate: string | undefined, timeZone: string, suffix = "") {
   const name = escapeHtml(task.name);
   const formattedName = task.name.trimStart().startsWith("*") ? `<b>${name}</b>` : name;
@@ -102,10 +121,12 @@ function formatSummaryTask(task: TaskRecord, endDate: string | undefined, timeZo
   return endDate && getDateInTimeZone(task.dueAt, timeZone) > endDate ? `<i>${line}</i>` : line;
 }
 
+/** Escapes task and course text embedded in Calendar's HTML description. */
 function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character);
 }
 
+/** Selects tasks within one inclusive nine-day weekly range. */
 export function selectTasksForWeeklySummary(tasks: TaskRecord[], weekStart: string, timeZone = "UTC") {
   const range = getWeeklySummaryRange(weekStart);
   const byCourse = new Map<string, TaskRecord[]>();
@@ -124,6 +145,7 @@ export function selectTasksForWeeklySummary(tasks: TaskRecord[], weekStart: stri
   }));
 }
 
+/** Formats incomplete weekly tasks in configured course order. */
 export function formatWeeklySummary(sections: ReturnType<typeof selectTasksForWeeklySummary>, order: string[] = [], timeZone = "UTC") {
   const orderIndex = new Map(order.map((course, index) => [courseKey(course), index]));
   const ordered = [...sections].sort((a, b) => (orderIndex.get(a.key) ?? Number.MAX_SAFE_INTEGER) - (orderIndex.get(b.key) ?? Number.MAX_SAFE_INTEGER));
