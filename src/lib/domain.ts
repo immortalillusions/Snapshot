@@ -90,7 +90,8 @@ export function selectTasksForSummary(tasks: TaskRecord[], now: Date, lookaheadD
     });
     for (const task of sorted) {
       if (selected.length >= minimumPerCourse) break;
-      if (!selected.includes(task)) selected.push(task);
+      const dueDate = getDateInTimeZone(task.dueAt, timeZone);
+      if (dueDate >= startDate && !selected.includes(task)) selected.push(task);
     }
     return { course: courseTasks[0].course, key, tasks: selected.sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime()) };
   });

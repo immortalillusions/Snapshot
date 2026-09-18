@@ -36,6 +36,18 @@ test("selects summary dates in the user's timezone", () => {
   assert.deepEqual(result[0].tasks.map(task => task.id), ["today"]);
 });
 
+test("does not use past tasks to fill the daily summary minimum", () => {
+  const now = new Date("2026-09-02T12:00:00Z");
+  const tasks: TaskRecord[] = [
+    { id: "past", course: "CS 2214", name: "Past", dueAt: new Date("2026-09-01T12:00:00Z"), completed: false },
+    { id: "future", course: "CS 2214", name: "Future", dueAt: new Date("2026-09-03T12:00:00Z"), completed: false },
+  ];
+
+  const result = selectTasksForSummary(tasks, now, 0, 2);
+
+  assert.deepEqual(result[0].tasks.map(task => task.id), ["future"]);
+});
+
 test("selects the inclusive Saturday through following Sunday weekly range", () => {
   const tasks: TaskRecord[] = [
     { id: "before", course: "CS 2214", name: "Before", dueAt: new Date("2026-09-04T12:00:00Z"), completed: false },
