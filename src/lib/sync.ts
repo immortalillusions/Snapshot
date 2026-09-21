@@ -42,7 +42,7 @@ export async function syncCalendar(userId: string, fullSync = false, now = new D
   let items: Array<{ id?: string | null; status?: string | null; summary?: string | null; start?: { date?: string | null; dateTime?: string | null } | null }> = [];
   // Fetch every page before committing the new sync token.
   do {
-    const response = await calendar.events.list({ calendarId: state.calendar_id, showDeleted: true, singleEvents: true, pageToken, syncToken: fullSync ? undefined : state.sync_token ?? undefined, maxResults: 2500 });
+    const response = await calendar.events.list({ calendarId: state.calendar_id, showDeleted: true, singleEvents: true, pageToken, syncToken: fullSync ? undefined : state.sync_token ?? undefined, timeMin: fullSync ? new Date(pastEventCutoff).toISOString() : undefined, maxResults: 2500 });
     items = items.concat(response.data.items ?? []);
     pageToken = response.data.nextPageToken ?? undefined;
     nextSyncToken = response.data.nextSyncToken ?? nextSyncToken;
